@@ -1,3 +1,5 @@
+// Sprint 3 - Salma Essamiri: UI components, pages, API service, i18n, tests
+
 /**
  * src/components/index.tsx
  * All shared components — Layout, Auth forms, Facility cards, Booking forms
