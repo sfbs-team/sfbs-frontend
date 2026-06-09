@@ -71,18 +71,25 @@ export const Button = ({ variant = 'primary', isLoading, children, className, ..
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string; error?: string
 }
-export const Input = ({ label, error, className, ...props }: InputProps) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-    <input className={clsx(
-      'px-3 py-2 border rounded-lg outline-none transition-colors',
-      'dark:bg-gray-700 dark:border-gray-600 dark:text-white',
-      error ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-primary-500',
-      className
-    )} {...props} />
-    {error && <p className="text-xs text-red-500">{error}</p>}
-  </div>
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ label, error, className, ...props }, ref) => (
+    <div className="flex flex-col gap-1">
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+      <input
+        ref={ref}
+        className={clsx(
+          'px-3 py-2 border rounded-lg outline-none transition-colors',
+          'dark:bg-gray-700 dark:border-gray-600 dark:text-white',
+          error ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-primary-500',
+          className
+        )}
+        {...props}
+      />
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  )
 )
+Input.displayName = 'Input'
 
 // ── Notification Toast ────────────────────────────────────────────────────── //
 export const NotificationToast = () => {
@@ -113,8 +120,10 @@ export const Navbar = () => {
   const { isAuthenticated, user } = useAppSelector(s => s.auth)
   const { mode, language }        = useAppSelector(s => s.ui.theme)
   const navigate = useNavigate()
-
   const handleLogout = () => { dispatch(logout()); navigate('/login') }
+
+  const isAdmin = user?.role === 'admin'
+  const isStaff = user?.role === 'staff' || user?.role === 'admin'
 
   return (
     <nav className="bg-sfbs-dark dark:bg-gray-900 text-white px-6 py-4 flex items-center justify-between shadow-lg">
@@ -125,6 +134,8 @@ export const Navbar = () => {
         <Link to="/"           className="hover:text-primary-300 transition-colors">{t('nav.home')}</Link>
         <Link to="/facilities" className="hover:text-primary-300 transition-colors">{t('nav.facilities')}</Link>
         {isAuthenticated && <Link to="/bookings" className="hover:text-primary-300 transition-colors">{t('nav.bookings')}</Link>}
+        {isStaff && <Link to="/staff" className="hover:text-primary-300 transition-colors font-medium text-amber-300">Staff</Link>}
+        {isAdmin && <Link to="/admin" className="hover:text-primary-300 transition-colors font-medium text-emerald-300">Admin</Link>}
         <button onClick={() => dispatch(toggleTheme())} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
           {mode === 'light' ? '🌙' : '☀️'}
         </button>
@@ -157,6 +168,14 @@ export const Navbar = () => {
 export const ProtectedRoute = () => {
   const { isAuthenticated } = useAppSelector(s => s.auth)
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />
+}
+
+// ── Role Route ────────────────────────────────────────────────────────────── //
+export const RoleRoute = ({ allow }: { allow: Array<'customer' | 'admin' | 'staff'> }) => {
+  const { isAuthenticated, user } = useAppSelector(s => s.auth)
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!user || !allow.includes(user.role)) return <Navigate to="/unauthorized" replace />
+  return <Outlet />
 }
 
 // ── Facility Card ─────────────────────────────────────────────────────────── //
@@ -197,7 +216,9 @@ export const FacilityCard = ({ facility }: { facility: Facility }) => {
 export const BookingCard = ({ booking }: { booking: Booking }) => {
   const { t }    = useTranslation()
   const dispatch = useAppDispatch()
+  const navigate = useNavigate()
   const canCancel = ['pending', 'confirmed'].includes(booking.status)
+  const canPay    = booking.status === 'pending'
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-5 border border-gray-100 dark:border-gray-700">
       <div className="flex justify-between items-start mb-3">
@@ -208,15 +229,25 @@ export const BookingCard = ({ booking }: { booking: Booking }) => {
         <Badge status={booking.status} />
       </div>
       <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1 mb-4">
-        <p>⏰ {new Date(booking.timeslot?.start_time).toLocaleString()} → {new Date(booking.timeslot?.end_time).toLocaleString()}</p>
+        <p>⏰ {new Date(booking.start_time).toLocaleString()} → {new Date(booking.end_time).toLocaleString()}</p>
         <p>💰 Total: <span className="font-semibold">${booking.total_amount}</span></p>
         {booking.notes && <p>📝 {booking.notes}</p>}
       </div>
-      {canCancel && (
-        <Button variant="danger" className="w-full justify-center text-sm"
-          onClick={() => dispatch(cancelBookingThunk(booking.id))}>
-          {t('booking.cancel')}
-        </Button>
+      {(canPay || canCancel) && (
+        <div className="flex gap-2">
+          {canPay && (
+            <Button className="flex-1 justify-center text-sm"
+              onClick={() => navigate(`/bookings/${booking.id}/pay`)}>
+              {t('booking.pay_now') || 'Pay Now'}
+            </Button>
+          )}
+          {canCancel && (
+            <Button variant="danger" className="flex-1 justify-center text-sm"
+              onClick={() => dispatch(cancelBookingThunk(booking.id))}>
+              {t('booking.cancel')}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -243,6 +274,16 @@ export const LoginForm = () => {
     }
   }
 
+  const handleGoogleLogin = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/auth/google/login')
+      const data = await res.json()
+      window.location.href = data.authorization_url
+    } catch {
+      dispatch(addNotification({ type: 'error', message: 'Could not start Google login' }))
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
@@ -256,6 +297,27 @@ export const LoginForm = () => {
           <Input label={t('auth.password')} type="password" {...register('password')} error={errors.password?.message as string} />
           <Button className="w-full justify-center" isLoading={isLoading}>{t('auth.login_btn')}</Button>
         </form>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+          <span className="text-xs text-gray-400 dark:text-gray-500 uppercase">{t('auth.or')}</span>
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors font-medium"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          {t('auth.google_login')}
+        </button>
+
         <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
           {t('auth.no_account')}{' '}
           <Link to="/register" className="text-primary-600 font-semibold hover:underline">{t('nav.register')}</Link>
@@ -264,7 +326,6 @@ export const LoginForm = () => {
     </div>
   )
 }
-
 // ── Register Form ─────────────────────────────────────────────────────────── //
 const registerSchema = z.object({
   username:   z.string().min(3, 'Min 3 characters'),
