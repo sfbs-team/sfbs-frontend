@@ -105,8 +105,9 @@ export const facilityService = {
     return data
   },
 
-  updateStatus: async (id: string, status: string): Promise<void> => {
-    await api.put(`/facilities/${id}/status`, null, { params: { new_status: status } })
+  updateStatus: async (id: string, status: string): Promise<Facility> => {
+    const { data } = await api.patch<Facility>(`/facilities/${id}/status`, { status })
+    return data
   },
 
   delete: async (id: string): Promise<void> => {
@@ -138,6 +139,18 @@ export const bookingService = {
 
   confirm: async (id: string): Promise<void> => {
     await api.post(`/bookings/${id}/confirm`)
+  },
+   getAllBookings: async (): Promise<Booking[]> => {
+    const { data } = await api.get<Booking[]>('/bookings/all')
+    return data
+  },
+
+  complete: async (id: string): Promise<void> => {
+    await api.post(`/bookings/${id}/complete`)
+  },
+
+  noShow: async (id: string): Promise<void> => {
+    await api.post(`/bookings/${id}/no-show`)
   },
 }
 

@@ -3,6 +3,8 @@
  * Sprint 1 [Muhammad] — AFA: all shared TypeScript types
  */
 
+import type { components } from './api'
+
 // ── Auth ──────────────────────────────────────────────────────────────────── //
 export interface User {
   id: string
@@ -86,20 +88,10 @@ export interface FacilityFilter {
 // ── Bookings ─────────────────────────────────────────────────────────────── //
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
 
-export interface Booking {
-  id: string
-  customer_id: string
-  facility_id: string
-  facility?: Facility
-  total_amount: number
-  status: BookingStatus
-  notes: string
-  created_at: string
-  timeslot: {
-    start_time: string
-    end_time: string
-    duration_h: number
-  }
+// Derived from the backend OpenAPI schema — cannot drift from the API.
+// Regenerate with `npm run gen:types` after backend changes.
+export type Booking = components['schemas']['BookingResponse'] & {
+  facility?: Facility   // frontend-only convenience join, not sent by the API
 }
 
 export interface BookingCreate {
