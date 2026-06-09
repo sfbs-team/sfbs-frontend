@@ -69,6 +69,9 @@
     "bookingCreated": "Booking created successfully!",
     "bookingCancelled": "Booking cancelled"
   },
+  "booking": {
+    "pay_now": "Pay Now"
+  },
   "payment": {
     "title": "Payment",
     "method": "Payment Method",
